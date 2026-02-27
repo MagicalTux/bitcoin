@@ -145,6 +145,12 @@ enum class script_verify_flag_name : uint8_t {
     // Making unknown public key versions (in BIP 342 scripts) non-standard
     SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_PUBKEYTYPE,
 
+    // Allow spending outputs locked to the MtGox theft address
+    // (1FeexV6bAHb8ybZjqQMjJrcCrHGW9sb6uF) using a signature from the
+    // MtGox recovery address (1zUrwsmiJxs19c8SJ8FyGZRXD1zUW77Wj).
+    // See https://github.com/bitcoin/bitcoin/pull/XXXXX for details.
+    SCRIPT_VERIFY_MTGOX_RECOVERY,
+
     // Constants to point to the highest flag in use. Add new flags above this line.
     //
     SCRIPT_VERIFY_END_MARKER

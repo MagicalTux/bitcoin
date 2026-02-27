@@ -2003,6 +2003,38 @@ static bool VerifyWitnessProgram(const CScriptWitness& witness, int witversion, 
     // There is intentionally no return statement here, to be able to use "control reaches end of non-void function" warnings to detect gaps in the logic above.
 }
 
+// MtGox recovery: pubkey hash of the theft address 1FeexV6bAHb8ybZjqQMjJrcCrHGW9sb6uF
+static const std::vector<unsigned char> MTGOX_THEFT_HASH = {
+    0xa0, 0xb0, 0xd6, 0x0e, 0x59, 0x91, 0x57, 0x8e, 0xd3, 0x7c,
+    0xbd, 0xa2, 0xb1, 0x7d, 0x8b, 0x2c, 0xe2, 0x3a, 0xb2, 0x95
+};
+
+// MtGox recovery: pubkey hash of the recovery address 1zUrwsmiJxs19c8SJ8FyGZRXD1zUW77Wj
+static const std::vector<unsigned char> MTGOX_RECOVERY_HASH = {
+    0x0a, 0xde, 0xf7, 0x95, 0xdd, 0xcc, 0xb5, 0x51, 0x50, 0xbe,
+    0xdc, 0xf0, 0xaf, 0x6c, 0x22, 0x2f, 0xa8, 0x21, 0xcc, 0xd2
+};
+
+/** Check if a scriptPubKey is a P2PKH script paying to the given hash. */
+static bool IsP2PKHForHash(const CScript& script, const std::vector<unsigned char>& hash)
+{
+    return script.size() == 25 &&
+           script[0] == OP_DUP &&
+           script[1] == OP_HASH160 &&
+           script[2] == 20 &&
+           script[23] == OP_EQUALVERIFY &&
+           script[24] == OP_CHECKSIG &&
+           std::equal(hash.begin(), hash.end(), script.begin() + 3);
+}
+
+/** Build a P2PKH scriptPubKey for the given 20-byte hash. */
+static CScript MakeP2PKH(const std::vector<unsigned char>& hash)
+{
+    CScript s;
+    s << OP_DUP << OP_HASH160 << hash << OP_EQUALVERIFY << OP_CHECKSIG;
+    return s;
+}
+
 bool VerifyScript(const CScript& scriptSig, const CScript& scriptPubKey, const CScriptWitness* witness, script_verify_flags flags, const BaseSignatureChecker& checker, ScriptError* serror)
 {
     static const CScriptWitness emptyWitness;
@@ -2017,6 +2049,13 @@ bool VerifyScript(const CScript& scriptSig, const CScript& scriptPubKey, const C
         return set_error(serror, SCRIPT_ERR_SIG_PUSHONLY);
     }
 
+    // MtGox recovery: if the flag is set and the output pays to the MtGox
+    // theft address, substitute the recovery address so that the recovery
+    // key can sign the spend.
+    bool mtgox_recovery = (flags & SCRIPT_VERIFY_MTGOX_RECOVERY) && IsP2PKHForHash(scriptPubKey, MTGOX_THEFT_HASH);
+    const CScript recoveryScriptPubKey = mtgox_recovery ? MakeP2PKH(MTGOX_RECOVERY_HASH) : CScript();
+    const CScript& effectiveScriptPubKey = mtgox_recovery ? recoveryScriptPubKey : scriptPubKey;
+
     // scriptSig and scriptPubKey must be evaluated sequentially on the same stack
     // rather than being simply concatenated (see CVE-2010-5141)
     std::vector<std::vector<unsigned char> > stack, stackCopy;
@@ -2025,7 +2064,7 @@ bool VerifyScript(const CScript& scriptSig, const CScript& scriptPubKey, const C
         return false;
     if (flags & SCRIPT_VERIFY_P2SH)
         stackCopy = stack;
-    if (!EvalScript(stack, scriptPubKey, flags, checker, SigVersion::BASE, serror))
+    if (!EvalScript(stack, effectiveScriptPubKey, flags, checker, SigVersion::BASE, serror))
         // serror is set
         return false;
     if (stack.empty())

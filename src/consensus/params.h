@@ -104,6 +104,10 @@ struct Params {
      * Note that segwit v0 script rules are enforced on all blocks except the
      * BIP 16 exception blocks. */
     int SegwitHeight;
+    /** Block height at which MtGox recovery rule becomes active.
+     * When active, outputs locked to 1FeexV6bAHb8ybZjqQMjJrcCrHGW9sb6uF
+     * can be spent using a signature from 1zUrwsmiJxs19c8SJ8FyGZRXD1zUW77Wj. */
+    int MtGoxRecoveryHeight{std::numeric_limits<int>::max()};
     /** Don't warn about unknown BIP 9 activations below this height.
      * This prevents us from warning about the CSV and segwit activations. */
     int MinBIP9WarningHeight;
